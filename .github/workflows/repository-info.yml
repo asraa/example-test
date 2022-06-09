@@ -1,0 +1,31 @@
+name: Print Repository Info
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+
+jobs:
+  info:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Needed to detect the current reusable repository and ref.
+      contents: read
+    steps:
+      - name: Detect the repo info
+        id: detect
+        shell: bash
+        run: | 
+          status_code=$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=${{ github.repository }}/ko-builder" -o jwt.json -w '%{http_code}')
+          if [[ $status_code -ne 200 ]]; then
+              error_msg=$(jq -r .message jwt.json 2>/dev/null || echo 'unknown error')
+              echo "Failed to get OIDC token from GitHub, response $status_code: $error_msg"
+              exit 1;
+          fi
+          export REPO_OWNER_ID=$(cat jwt.json | jq -r '.value' | cut -d "." -f2 | base64 -d | jq -r '.repository_owner_id')
+          if [ -z $REPO_OWNER_ID ]; then
+            echo "OIDC token parsing failure: REPO_OWNER_ID could not be retrieved"
+            exit 1;
+          fi
+          echo $REPO_OWNER_ID
